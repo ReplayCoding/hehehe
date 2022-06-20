@@ -1,5 +1,4 @@
-with import <nixpkgs> {
-  crossSystem = "i686-linux";
-};
-
-mkShell {}
+with import <nixpkgs> {};
+mkShell {
+  packages = [ pkgsi686Linux.gcc ];
+}
