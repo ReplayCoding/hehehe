@@ -1,5 +1,5 @@
 let client = Process.getModuleByName("client.so").base
-let onGameEvent = client.add("0x0119de80")
+// let onGameEvent = client.add("0x0119de80")
 let fireGameEvent = client.add("0x01151a20")
 
 let tf_damageTypes = [
@@ -89,7 +89,7 @@ let tf_damageTypes = [
 
 ];
 
-// 0 & 1: ...
+// 0 & 1: CONSTRUCTOR AND DESTRUCTOR
 // 2: virtual const char *GetName() const = 0;	// get event name
 //
 // 3: virtual bool  IsReliable() const = 0; // if event handled reliable

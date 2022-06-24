@@ -1,25 +1,8 @@
 #include "frida-gum.h"
 
-#define READDEMOHEADER_OFFSET 0x003494c0
-
 typedef int (*printf_t)(const char *restrict format, ...);
 
 static bool have_we_inited = false;
-
-#define MAX_OSPATH 260 // I think
-struct demoheader_t {
-  char demofilestamp[8];          // Should be HL2DEMO
-  int demoprotocol;               // Should be DEMO_PROTOCOL
-  int networkprotocol;            // Should be PROTOCOL_VERSION
-  char servername[MAX_OSPATH];    // Name of server
-  char clientname[MAX_OSPATH];    // Name of client who recorded the game
-  char mapname[MAX_OSPATH];       // Name of map
-  char gamedirectory[MAX_OSPATH]; // Name of game directory (com_gamedir)
-  float playback_time;            // Time of track
-  int playback_ticks;             // # of ticks in track
-  int playback_frames;            // # of frames in track
-  int signonlength;               // length of sigondata in bytes
-};
 
 GumInterceptor *interceptor = NULL;
 GumInvocationListener *listener = NULL;
@@ -28,7 +11,7 @@ struct _TestListener {
   GObject parent;
 };
 
-enum _TestHookId { TEST_HOOK_DLOPEN, TEST_HOOK_READDEMOHEADER };
+enum _TestHookId { TEST_HOOK_DLOPEN };
 typedef enum _TestHookId TestHookId;
 
 static void test_listener_interface_init(gpointer g_iface, gpointer iface_data);
@@ -49,34 +32,9 @@ static void test_listener_on_leave(GumInvocationListener *self,
   case TEST_HOOK_DLOPEN: {
     const gchar *module_name =
         gum_invocation_context_get_nth_argument(context, 0);
-    if (g_strrstr(module_name, "engine.so") &&
+    if (g_strrstr(module_name, "client.so") &&
         gum_module_ensure_initialized(module_name)) {
-      const gpointer readDemoHeader_ptr =
-          GSIZE_TO_POINTER(gum_module_find_base_address(module_name)) +
-          READDEMOHEADER_OFFSET;
-      gum_interceptor_begin_transaction(interceptor);
-      gum_interceptor_attach(interceptor, readDemoHeader_ptr, self,
-                             GSIZE_TO_POINTER(TEST_HOOK_READDEMOHEADER));
-      gum_interceptor_end_transaction(interceptor);
     };
-    break;
-  }
-  case TEST_HOOK_READDEMOHEADER: {
-    const struct demoheader_t *m_DemoHeader =
-        gum_invocation_context_get_return_value(context);
-    g_print("\n\nDEMO:\n");
-		g_print( "     demofilestamp: %s\n", m_DemoHeader->demofilestamp );
-		g_print( "     demoprotocol: %i\n", m_DemoHeader->demoprotocol );
-		g_print( "     networkprotocol: %i\n", m_DemoHeader->networkprotocol );
-		g_print( "     servername: %s\n", m_DemoHeader->servername );
-		g_print( "     clientname: %s\n", m_DemoHeader->clientname );
-		g_print( "     mapname: %s\n", m_DemoHeader->mapname );
-		g_print( "     gamedirectory: %s\n", m_DemoHeader->gamedirectory );
-		g_print( "     playback_time: %f\n", m_DemoHeader->playback_time );
-		g_print( "     playback_ticks: %i\n", m_DemoHeader->playback_ticks );	
-		g_print( "     playback_frames: %i\n", m_DemoHeader->playback_frames );
-		g_print( "     signonlength: %i\n", m_DemoHeader->signonlength );
-    g_print("\n\n");
     break;
   }
   }
@@ -112,7 +70,7 @@ void do_dlopen_shit(void) {
 }
 
 __attribute__((constructor)) void pooter_init(void) {
-  if(!have_we_inited) {
+  if (!have_we_inited) {
     gum_init_embedded();
     do_printf_shit();
     do_dlopen_shit();
