@@ -1,36 +1,27 @@
+#define _GLIBCXX_USE_CXX11_ABI 0
+#define _POSIX 1
+#define FREETYPE_GL_USE_VAO 1
+#define RAD_TELEMETRY_DISABLED 1
+#define LINUX 1
+#define USE_SDL 1
+#define _LINUX 1
+#define POSIX 1
+#define GNUC 1
+#define NO_MALLOC_OVERRIDE 1
+
+#include <cdll_int.h>
+#include <igameevents.h>
+#include <interface.h>
+
 #include "frida-gum.h"
 
 const gpointer DOSTARTUPSHADERPRELOADING_OFFSET = (gpointer)0x60ae0;
 const gpointer FIREGAMEEVENT_OFFSET = (gpointer)0x1154430;
 
-class IGameEvent {
-public:
-  virtual ~IGameEvent(){};
-  virtual const char *GetName() const = 0; // get event name
-
-  virtual bool IsReliable() const = 0; // if event handled reliable
-  virtual bool IsLocal() const = 0;    // if event is never networked
-  virtual bool
-  IsEmpty(const char *keyName = NULL) = 0; // check if data field exists
-
-  // Data access
-  virtual bool GetBool(const char *keyName = NULL,
-                       bool defaultValue = false) = 0;
-  virtual int GetInt(const char *keyName = NULL, int defaultValue = 0) = 0;
-  virtual float GetFloat(const char *keyName = NULL,
-                         float defaultValue = 0.0f) = 0;
-  virtual const char *GetString(const char *keyName = NULL,
-                                const char *defaultValue = "") = 0;
-
-  virtual void SetBool(const char *keyName, bool value) = 0;
-  virtual void SetInt(const char *keyName, int value) = 0;
-  virtual void SetFloat(const char *keyName, float value) = 0;
-  virtual void SetString(const char *keyName, const char *value) = 0;
-};
-
 typedef int printf_t(const char *format, ...);
 
 static bool have_we_inited = false;
+static IVEngineClient013 *engineClient;
 
 GumInterceptor *interceptor = NULL;
 GumInvocationListener *listener = NULL;
@@ -127,10 +118,13 @@ enum ETFDmgCustom {
 static void handleGameEvent_handler(const void *thisPtr,
                                     IGameEvent *gameEvent) {
   const int customkill = gameEvent->GetInt("customkill", TF_DMG_CUSTOM_NONE);
-  g_print("FireGameEvent(this: %p, event: %p)\n", thisPtr, gameEvent);
-  g_print("\t event name: %s\n", gameEvent->GetName());
-  g_print("\t weapon name: %s\n", gameEvent->GetString("weapon"));
-  g_print("\t customkill: %d\n", customkill);
+  int i = 0;
+  engineClient->Con_NPrintf(i++, "FireGameEvent(this: %p, event: %p)\n",
+                            thisPtr, gameEvent);
+  engineClient->Con_NPrintf(i++, "\t event name: %s\n", gameEvent->GetName());
+  engineClient->Con_NPrintf(i++, "\t weapon name: %s\n",
+                            gameEvent->GetString("weapon"));
+  engineClient->Con_NPrintf(i++, "\t customkill: %d\n", customkill);
   if (customkill == TF_DMG_CUSTOM_BACKSTAB) {
     gameEvent->SetInt("customkill", TF_DMG_CUSTOM_NONE);
   };
@@ -181,6 +175,14 @@ static void on_leave(GumInvocationContext *context, void *user_data) {
         gum_interceptor_replace(interceptor, doStartupShaderPreloading_ptr,
                                 (gpointer)do_nothing_stub, NULL);
         gum_interceptor_end_transaction(interceptor);
+      } else if (g_strrstr(module_name, "engine.so")) {
+        const CreateInterfaceFn interfaceFactory =
+            (void *)gum_module_find_export_by_name(module_name,
+                                                   "CreateInterface");
+        if (engineClient == nullptr) {
+          engineClient = interfaceFactory("VEngineClient013", nullptr);
+          g_print("Found engine client: %p\n", engineClient);
+        };
       };
       break;
     }
@@ -190,7 +192,7 @@ static void on_leave(GumInvocationContext *context, void *user_data) {
 };
 
 void do_printf_shit(void) {
-  printf_t* printf_found =
+  printf_t *printf_found =
       GSIZE_TO_POINTER(gum_module_find_export_by_name(NULL, "printf"));
   printf_found("\n\n------------LOADED------------\n");
   printf_found("printf is at 0x%X\n", printf_found);
