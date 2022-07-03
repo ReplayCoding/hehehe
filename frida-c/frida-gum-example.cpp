@@ -3,27 +3,15 @@
 const gpointer DOSTARTUPSHADERPRELOADING_OFFSET = 0x60ae0;
 const gpointer FIREGAMEEVENT_OFFSET = 0x1154430;
 
-typedef int (*printf_t)(const char *restrict format, ...);
+typedef int (*printf_t)(const char *format, ...);
 
 static bool have_we_inited = false;
 
 GumInterceptor *interceptor = NULL;
 GumInvocationListener *listener = NULL;
 
-struct _TestListener {
-  GObject parent;
-};
-
-enum _TestHookId { TEST_HOOK_DLOPEN, TEST_HOOK_FIREGAMEEVENT };
+enum _TestHookId: int { TEST_HOOK_DLOPEN, TEST_HOOK_FIREGAMEEVENT };
 typedef enum _TestHookId TestHookId;
-
-static void test_listener_interface_init(gpointer g_iface, gpointer iface_data);
-
-#define TEST_TYPE_LISTENER (test_listener_get_type())
-G_DECLARE_FINAL_TYPE(TestListener, test_listener, TEST, LISTENER, GObject)
-G_DEFINE_TYPE_WITH_CODE(TestListener, test_listener, G_TYPE_OBJECT,
-                        G_IMPLEMENT_INTERFACE(GUM_TYPE_INVOCATION_LISTENER,
-                                              test_listener_interface_init))
 
 enum ETFDmgCustom {
   TF_DMG_CUSTOM_NONE = 0,
@@ -116,10 +104,10 @@ static void handleGameEvent_handler(const void *thisPtr,
   // In GNU C, sizeof void is 1, so pointer arithmetic just works like
   // regular arithmetic (i think?)
   // https://gcc.gnu.org/onlinedocs/gcc/Pointer-Arith.html#Pointer-Arith
-  typedef char *(*GetName_t)(void *this);
-  typedef char *(*GetString_t)(void *this, char *keyName, char *defaultValue);
-  typedef int (*GetInt_t)(void *this, char *keyName, int defaultValue);
-  typedef void (*SetInt_t)(void *this, char *keyName, int value);
+  typedef char *(*GetName_t)(void *_this);
+  typedef char *(*GetString_t)(void *_this, char *keyName, char *defaultValue);
+  typedef int (*GetInt_t)(void *_this, char *keyName, int defaultValue);
+  typedef void (*SetInt_t)(void *_this, char *keyName, int value);
 
   const GetName_t *getName = *gameEvent + (2 * sizeof(void *));
   const GetString_t *getString = *gameEvent + (9 * sizeof(void *));
@@ -136,10 +124,9 @@ static void handleGameEvent_handler(const void *thisPtr,
   };
 };
 
-static void test_listener_on_enter(GumInvocationListener *self,
-                                   GumInvocationContext *context) {
-  TestHookId hook_id = GUM_IC_GET_FUNC_DATA(context, TestHookId);
-  switch (hook_id) {
+static void on_enter(GumInvocationContext *context, void *user_data) {
+  TestHookId hookid = (int) gum_invocation_context_get_listener_function_data(context);
+  switch (hookid) {
     case TEST_HOOK_DLOPEN:
       break;
     case TEST_HOOK_FIREGAMEEVENT: {
@@ -152,12 +139,11 @@ static void test_listener_on_enter(GumInvocationListener *self,
   }
 };
 
-static void doNothingLol(void *_this) { g_print("DOING NOTHING\n"); }
+static void do_nothing_stub(void *_this) { g_print("DOING NOTHING\n"); }
 
-static void test_listener_on_leave(GumInvocationListener *self,
-                                   GumInvocationContext *context) {
-  TestHookId hook_id = GUM_IC_GET_FUNC_DATA(context, TestHookId);
-  switch (hook_id) {
+static void on_leave(GumInvocationContext *context, void *user_data) {
+  TestHookId hookid = (int) gum_invocation_context_get_listener_function_data(context);
+  switch (hookid) {
     case TEST_HOOK_DLOPEN: {
       const gchar *module_name =
           gum_invocation_context_get_nth_argument(context, 0);
@@ -171,7 +157,7 @@ static void test_listener_on_leave(GumInvocationListener *self,
         g_print("COMBINED: %p\n", fireGameEvent_ptr);
         g_print("\n---------------\n");
         gum_interceptor_begin_transaction(interceptor);
-        gum_interceptor_attach(interceptor, fireGameEvent_ptr, self,
+        gum_interceptor_attach(interceptor, fireGameEvent_ptr, listener,
                                GSIZE_TO_POINTER(TEST_HOOK_FIREGAMEEVENT));
         gum_interceptor_end_transaction(interceptor);
       } else if (g_strrstr(module_name, "shaderapidx9.so")) {
@@ -179,7 +165,7 @@ static void test_listener_on_leave(GumInvocationListener *self,
             module_base + DOSTARTUPSHADERPRELOADING_OFFSET;
         gum_interceptor_begin_transaction(interceptor);
         gum_interceptor_replace(interceptor, doStartupShaderPreloading_ptr,
-                                doNothingLol, NULL);
+                                do_nothing_stub, NULL);
         gum_interceptor_end_transaction(interceptor);
       };
       break;
@@ -188,17 +174,6 @@ static void test_listener_on_leave(GumInvocationListener *self,
       break;
   }
 };
-
-static void test_listener_interface_init(gpointer g_iface,
-                                         gpointer iface_data) {
-  GumInvocationListenerInterface *iface = g_iface;
-
-  iface->on_enter = test_listener_on_enter;
-  iface->on_leave = test_listener_on_leave;
-}
-
-static void test_listener_class_init(TestListenerClass *klass) {}
-static void test_listener_init(TestListener *self) {}
 
 void do_printf_shit(void) {
   printf_t printf_found =
@@ -210,7 +185,8 @@ void do_printf_shit(void) {
 
 void do_dlopen_shit(void) {
   interceptor = gum_interceptor_obtain();
-  listener = g_object_new(TEST_TYPE_LISTENER, NULL);
+  listener = gum_make_call_listener(on_enter, on_leave, NULL, NULL);
+
   GumAddress dlopen_address = gum_module_find_export_by_name(NULL, "dlopen");
   gum_interceptor_begin_transaction(interceptor);
   gum_interceptor_attach(interceptor, GSIZE_TO_POINTER(dlopen_address),
@@ -228,8 +204,8 @@ __attribute__((constructor)) void pooter_init(void) {
 
 __attribute__((destructor)) void pooter_deinit(void) {
   if (have_we_inited) {
-    g_object_unref(interceptor);
-    g_object_unref(listener);
+    gum_object_unref(interceptor);
+    gum_object_unref(listener);
     gum_deinit_embedded();
   };
 };
