@@ -1,4 +1,6 @@
-with import <nixpkgs> {};
+with import <nixpkgs> {
+  system = "i686-linux";
+};
 mkShell {
-  packages = [ pkgsi686Linux.gcc ];
+  nativeBuildInputs = [ meson ninja ];
 }
