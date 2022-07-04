@@ -9,3 +9,9 @@
 #define POSIX 1
 #define GNUC 1
 #define NO_MALLOC_OVERRIDE 1
+
+namespace sdk {
+#include <cdll_int.h>
+#include <igameevents.h>
+#include <interface.h>
+} // namespace sdk
