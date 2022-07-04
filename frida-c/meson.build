@@ -1,7 +1,7 @@
 project('frida-c', 'cpp',
   version : '0.1',
   default_options :
-    ['warning_level=3', 'cpp_std=c++17']
+    ['warning_level=1', 'cpp_std=c++20']
 )
 
 frida_dir = 'frida-gum/'
@@ -26,6 +26,6 @@ sdk_dep = declare_dependency(
 
 add_project_arguments('-fpermissive', language: ['cpp'])
 shared_library('injectable',
-           'injectable.cpp',
+           'main.cpp',
            dependencies: [frida_dep, sdk_dep],
            install : true)

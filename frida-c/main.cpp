@@ -4,15 +4,13 @@
 
 #include <frida-gum.h>
 
-const gpointer DOSTARTUPSHADERPRELOADING_OFFSET = (gpointer)0x60ae0;
-const gpointer FIREGAMEEVENT_OFFSET = (gpointer)0x1154430;
+#include "listener.hpp"
+
+const gpointer DOSTARTUPSHADERPRELOADING_OFFSET =
+    reinterpret_cast<gpointer>(0x60ae0);
+const gpointer FIREGAMEEVENT_OFFSET = reinterpret_cast<gpointer>(0x1154430);
 
 typedef int printf_t(const char *format, ...);
-
-static bool have_we_inited = false;
-static IVEngineClient013 *engineClient;
-
-GumInterceptor *interceptor = NULL;
 
 enum _TestHookId : int { TEST_HOOK_DLOPEN, TEST_HOOK_FIREGAMEEVENT };
 typedef enum _TestHookId TestHookId;
@@ -103,57 +101,28 @@ enum ETFDmgCustom {
   TF_DMG_CUSTOM_END // END
 };
 
-static void do_nothing_stub(void *_this) { g_print("DOING NOTHING\n"); }
-static void handleGameEvent_handler(const void *thisPtr,
-                                    IGameEvent *gameEvent) {
-  const int customkill = gameEvent->GetInt("customkill", TF_DMG_CUSTOM_NONE);
-  int i = 0;
-  engineClient->Con_NPrintf(i++, "FireGameEvent(this: %p, event: %p)\n",
-                            thisPtr, gameEvent);
-  engineClient->Con_NPrintf(i++, "\t event name: %s\n", gameEvent->GetName());
-  engineClient->Con_NPrintf(i++, "\t weapon name: %s\n",
-                            gameEvent->GetString("weapon"));
-  engineClient->Con_NPrintf(i++, "\t customkill: %d\n", customkill);
-  if (customkill == TF_DMG_CUSTOM_BACKSTAB) {
-    gameEvent->SetInt("customkill", TF_DMG_CUSTOM_NONE);
-  };
-};
-
-class Listener {
+class MyListener : public ListenerWrapper {
 public:
-  Listener() {
-    this->listener =
-        gum_make_call_listener(this->on_enter, this->on_leave, this, NULL);
-  }
-  ~Listener() {
-    gum_object_unref(this->listener);
-  }
-  GumInvocationListener *listener;
-  int pootis{42};
-
-private:
-  static void on_enter(GumInvocationContext *context, void *user_data) {
-    Listener* _this = (Listener*) user_data;
-    g_print("Pootis is %d\n\n\n", _this->pootis);
-    TestHookId hookid =
-        (int)gum_invocation_context_get_listener_function_data(context);
+  MyListener(auto interceptor) : ListenerWrapper(), interceptor(interceptor) {};
+  virtual void on_enter(GumInvocationContext *context) {
+    TestHookId hookid = reinterpret_cast<int>(
+        gum_invocation_context_get_listener_function_data(context));
     switch (hookid) {
       case TEST_HOOK_DLOPEN:
         break;
       case TEST_HOOK_FIREGAMEEVENT: {
         const gpointer thisPtr =
             gum_invocation_context_get_nth_argument(context, 0);
-        const void *gameEvent =
-            gum_invocation_context_get_nth_argument(context, 1);
-        handleGameEvent_handler(thisPtr, (IGameEvent *)gameEvent);
+        const auto gameEvent = static_cast<IGameEvent *>(
+            gum_invocation_context_get_nth_argument(context, 1));
+        this->handleGameEvent_handler(thisPtr, gameEvent);
       }
     }
   };
 
-  static void on_leave(GumInvocationContext *context, void *user_data) {
-    Listener* _this = (Listener*) user_data;
-    TestHookId hookid =
-        (int)gum_invocation_context_get_listener_function_data(context);
+  virtual void on_leave(GumInvocationContext *context) {
+    TestHookId hookid = reinterpret_cast<int>(
+        gum_invocation_context_get_listener_function_data(context));
     switch (hookid) {
       case TEST_HOOK_DLOPEN: {
         const gchar *module_name =
@@ -163,29 +132,26 @@ private:
             gum_module_find_base_address(module_name);
         if (g_strrstr(module_name, "client.so")) {
           const gpointer fireGameEvent_ptr = module_base + FIREGAMEEVENT_OFFSET;
-          g_print("\n---------------\n");
-          g_print("MODULE BASE: %p\n", (void *)module_base);
-          g_print("FIREGAMEEVENT_OFFSET: %p\n", FIREGAMEEVENT_OFFSET);
-          g_print("COMBINED: %p\n", fireGameEvent_ptr);
-          g_print("\n---------------\n");
-          gum_interceptor_begin_transaction(interceptor);
-          gum_interceptor_attach(interceptor, fireGameEvent_ptr, _this->listener,
-                                 (void *)TEST_HOOK_FIREGAMEEVENT);
-          gum_interceptor_end_transaction(interceptor);
+          gum_interceptor_begin_transaction(this->interceptor);
+          gum_interceptor_attach(
+              this->interceptor, fireGameEvent_ptr, this->listener,
+              reinterpret_cast<void *>(TEST_HOOK_FIREGAMEEVENT));
+          gum_interceptor_end_transaction(this->interceptor);
         } else if (g_strrstr(module_name, "shaderapidx9.so")) {
           const gpointer doStartupShaderPreloading_ptr =
               module_base + DOSTARTUPSHADERPRELOADING_OFFSET;
-          gum_interceptor_begin_transaction(interceptor);
-          gum_interceptor_replace(interceptor, doStartupShaderPreloading_ptr,
-                                  (gpointer)do_nothing_stub, NULL);
-          gum_interceptor_end_transaction(interceptor);
+          gum_interceptor_begin_transaction(this->interceptor);
+          gum_interceptor_replace(this->interceptor,
+                                  doStartupShaderPreloading_ptr,
+                                  (gpointer)do_nothing_stub, nullptr);
+          gum_interceptor_end_transaction(this->interceptor);
         } else if (g_strrstr(module_name, "engine.so")) {
-          const CreateInterfaceFn interfaceFactory =
-              (void *)gum_module_find_export_by_name(module_name,
-                                                     "CreateInterface");
-          if (engineClient == nullptr) {
-            engineClient = interfaceFactory("VEngineClient013", nullptr);
-            g_print("Found engine client: %p\n", engineClient);
+          const auto interfaceFactory = reinterpret_cast<CreateInterfaceFn>(
+              gum_module_find_export_by_name(module_name, "CreateInterface"));
+          if (this->engineClient == nullptr) {
+            this->engineClient = static_cast<IVEngineClient013 *>(
+                interfaceFactory("VEngineClient013", nullptr));
+            g_print("Found engine client: %p\n", this->engineClient);
           };
         };
         break;
@@ -194,16 +160,40 @@ private:
         break;
     }
   };
+
+private:
+  IVEngineClient013 *engineClient{};
+  GumInterceptor *interceptor{};
+
+  static void do_nothing_stub(void *_this) { g_print("DOING NOTHING\n"); }
+  void handleGameEvent_handler(const void *thisPtr, IGameEvent *gameEvent) {
+    const int customkill = gameEvent->GetInt("customkill", TF_DMG_CUSTOM_NONE);
+    int i = 0;
+    engineClient->Con_NPrintf(i++, "FireGameEvent(this: %p, event: %p)\n",
+                              thisPtr, gameEvent);
+    engineClient->Con_NPrintf(i++, "\t event name: %s\n", gameEvent->GetName());
+    engineClient->Con_NPrintf(i++, "\t weapon name: %s\n",
+                              gameEvent->GetString("weapon"));
+    engineClient->Con_NPrintf(i++, "\t customkill: %d\n", customkill);
+    if (customkill == TF_DMG_CUSTOM_BACKSTAB) {
+      gameEvent->SetInt("customkill", TF_DMG_CUSTOM_NONE);
+    };
+  };
 };
+
+static bool have_we_inited = false;
+GumInterceptor *interceptor{};
+ListenerWrapper *listener{};
 
 void do_dlopen_shit(void) {
   interceptor = gum_interceptor_obtain();
-  auto listener = new Listener();
+  listener = new MyListener(interceptor);
 
-  GumAddress dlopen_address = gum_module_find_export_by_name(NULL, "dlopen");
+  auto dlopen_address = reinterpret_cast<void *>(
+      gum_module_find_export_by_name(nullptr, "dlopen"));
   gum_interceptor_begin_transaction(interceptor);
-  gum_interceptor_attach(interceptor, (void *)dlopen_address, listener->listener,
-                         (void *)TEST_HOOK_DLOPEN);
+  gum_interceptor_attach(interceptor, dlopen_address, listener->get_listener(),
+                         reinterpret_cast<void *>(TEST_HOOK_DLOPEN));
   gum_interceptor_end_transaction(interceptor);
 }
 
@@ -217,6 +207,7 @@ __attribute__((constructor)) void pooter_init(void) {
 __attribute__((destructor)) void pooter_deinit(void) {
   if (have_we_inited) {
     gum_object_unref(interceptor);
+    delete listener;
     gum_deinit_embedded();
   };
-};
+}
