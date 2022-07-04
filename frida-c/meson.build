@@ -1,6 +1,8 @@
 project('frida-c', 'cpp',
   version : '0.1',
-  default_options : ['warning_level=3', 'cpp_std=c++17'])
+  default_options :
+    ['warning_level=3', 'cpp_std=c++17']
+)
 
 frida_dir = 'frida-gum/'
 frida_dep = declare_dependency(
@@ -8,15 +10,17 @@ frida_dep = declare_dependency(
     link_args: ['-L' + meson.current_source_dir() / frida_dir, '-lfrida-gum'],
   )
 
+sdk_dir = 'source-sdk-2013/'
 sdk_dep = declare_dependency(
+    compile_args: ['-include' + meson.current_source_dir() / 'sdkfix.hpp'],
     include_directories: [
-      'source-sdk-2013/mp/src/mathlib',
-      'source-sdk-2013/mp/src/public',
-      'source-sdk-2013/mp/src/common',
-      'source-sdk-2013/mp/src/public/tier0',
-      'source-sdk-2013/mp/src/public/tier1',
-      'source-sdk-2013/mp/src/tier1',
-      'source-sdk-2013/mp/src',
+      sdk_dir / 'mp/src/mathlib',
+      sdk_dir / 'mp/src/public',
+      sdk_dir / 'mp/src/common',
+      sdk_dir / 'mp/src/public/tier0',
+      sdk_dir / 'mp/src/public/tier1',
+      sdk_dir / 'mp/src/tier1',
+      sdk_dir / 'mp/src',
     ],
   )
 
