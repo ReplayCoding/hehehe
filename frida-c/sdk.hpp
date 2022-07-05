@@ -1,3 +1,5 @@
+#pragma once
+
 // Yoinked from cathook
 #define _GLIBCXX_USE_CXX11_ABI 0
 #define _POSIX 1

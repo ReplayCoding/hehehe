@@ -1,3 +1,4 @@
+#pragma once
 #include <frida-gum.h>
 
 class ListenerWrapper {

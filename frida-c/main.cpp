@@ -1,5 +1,5 @@
-#include "sdk.hpp"
 #include "listener.hpp"
+#include "sdk.hpp"
 #include <frida-gum.h>
 
 const gpointer DOSTARTUPSHADERPRELOADING_OFFSET =
@@ -99,7 +99,7 @@ enum ETFDmgCustom {
 
 class MyListener : public ListenerWrapper {
 public:
-  MyListener(auto interceptor) : ListenerWrapper(), interceptor(interceptor) {};
+  MyListener(auto interceptor) : ListenerWrapper(), interceptor(interceptor){};
   virtual void on_enter(GumInvocationContext *context) {
     TestHookId hookid = reinterpret_cast<int>(
         gum_invocation_context_get_listener_function_data(context));
@@ -121,8 +121,8 @@ public:
         gum_invocation_context_get_listener_function_data(context));
     switch (hookid) {
       case TEST_HOOK_DLOPEN: {
-        const gchar *module_name =
-            (gchar *)gum_invocation_context_get_nth_argument(context, 0);
+        const gchar *module_name = static_cast<gchar *>(
+            gum_invocation_context_get_nth_argument(context, 0));
         gum_module_ensure_initialized(module_name);
         const GumAddress module_base =
             gum_module_find_base_address(module_name);
@@ -146,7 +146,7 @@ public:
               gum_module_find_export_by_name(module_name, "CreateInterface"));
           if (this->engineClient == nullptr) {
             this->engineClient = static_cast<IVEngineClient013 *>(
-                interfaceFactory("VEngineClient013", nullptr));
+                interfaceFactory(VENGINE_CLIENT_INTERFACE_VERSION_13, nullptr));
             g_print("Found engine client: %p\n", this->engineClient);
           };
         };
@@ -161,7 +161,7 @@ private:
   IVEngineClient013 *engineClient{};
   GumInterceptor *interceptor{};
 
-  static void do_nothing_stub(void *_this) { g_print("DOING NOTHING\n"); }
+  static void do_nothing_stub() { g_print("DOING NOTHING\n"); }
   void handleGameEvent_handler(const void *thisPtr, IGameEvent *gameEvent) {
     const int customkill = gameEvent->GetInt("customkill", TF_DMG_CUSTOM_NONE);
     int i = 0;
