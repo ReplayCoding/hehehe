@@ -110,7 +110,7 @@ public:
       case TEST_HOOK_FIREGAMEEVENT: {
         const gpointer thisPtr =
             gum_invocation_context_get_nth_argument(context, 0);
-        const auto gameEvent = static_cast<sdk::IGameEvent *>(
+        const auto gameEvent = static_cast<IGameEvent *>(
             gum_invocation_context_get_nth_argument(context, 1));
         this->handleGameEvent_handler(thisPtr, gameEvent);
       }
@@ -143,10 +143,10 @@ public:
                                   (gpointer)do_nothing_stub, nullptr);
           gum_interceptor_end_transaction(this->interceptor);
         } else if (g_strrstr(module_name, "engine.so")) {
-          const auto interfaceFactory = reinterpret_cast<sdk::CreateInterfaceFn>(
+          const auto interfaceFactory = reinterpret_cast<CreateInterfaceFn>(
               gum_module_find_export_by_name(module_name, "CreateInterface"));
           if (this->engineClient == nullptr) {
-            this->engineClient = static_cast<sdk::IVEngineClient013 *>(
+            this->engineClient = static_cast<IVEngineClient013 *>(
                 interfaceFactory("VEngineClient013", nullptr));
             g_print("Found engine client: %p\n", this->engineClient);
           };
@@ -159,11 +159,11 @@ public:
   };
 
 private:
-  sdk::IVEngineClient013 *engineClient{};
+  IVEngineClient013 *engineClient{};
   GumInterceptor *interceptor{};
 
   static void do_nothing_stub(void *_this) { g_print("DOING NOTHING\n"); }
-  void handleGameEvent_handler(const void *thisPtr, sdk::IGameEvent *gameEvent) {
+  void handleGameEvent_handler(const void *thisPtr, IGameEvent *gameEvent) {
     const int customkill = gameEvent->GetInt("customkill", TF_DMG_CUSTOM_NONE);
     int i = 0;
     engineClient->Con_NPrintf(i++, "FireGameEvent(this: %p, event: %p)\n",
