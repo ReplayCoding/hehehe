@@ -1,7 +1,6 @@
-#include <frida-gum.h>
-
 #include "sdk.hpp"
 #include "listener.hpp"
+#include <frida-gum.h>
 
 const gpointer DOSTARTUPSHADERPRELOADING_OFFSET =
     reinterpret_cast<gpointer>(0x60ae0);
